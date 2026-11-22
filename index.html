@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Walk the streets and watch life unfold in the medieval village of Alderwick.">
+  <meta name="theme-color" content="#13231c">
+  <title>Medieval Sim</title>
+  <link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
+<link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
+
+  <style>
+    :root { color-scheme: dark; font: 1rem/1.45 system-ui, sans-serif; background: #13231c; color: #f7ecd4; }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; overflow: hidden; overscroll-behavior: none; }
+    #game {
+      position: fixed;
+      inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+        env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+      overflow: hidden;
+    }
+    canvas { display: block; width: 100%; height: 100%; outline: 0; touch-action: none; }
+    .cover {
+      position: fixed;
+      inset: 0;
+      isolation: isolate;
+      display: grid;
+      align-items: center;
+      overflow: auto;
+      padding: max(1.25rem, env(safe-area-inset-top)) max(clamp(1.5rem, 7vw, 7rem), env(safe-area-inset-right))
+        max(1.25rem, env(safe-area-inset-bottom)) max(clamp(1.5rem, 7vw, 7rem), env(safe-area-inset-left));
+      background: #182b20;
+    }
+    .cover::before {
+      content: "";
+      position: fixed;
+      pointer-events: none;
+      z-index: -1;
+      inset: -13%;
+      background: linear-gradient(90deg, #11261bea 17%, #15291bc7 44%, #16271b3c 79%),
+        #384a2e url("cover.png") 55% center / cover;
+    }
+    .panel { width: min(100%, 32rem); }
+    h1 { margin: 0; font: 400 clamp(3.15rem, 10vw, 7.5rem) / .95 Georgia, serif; letter-spacing: -.045em; }
+    p { max-width: 34ch; margin: 1.05rem 0 1.3rem; color: #eee8d8; }
+    button {
+      min-height: 48px;
+      border: 1px solid #f7d897;
+      border-radius: .32rem;
+      padding: .61rem 1.25rem;
+      background: #e8c483;
+      color: #23271a;
+      font: 650 1rem system-ui, sans-serif;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    button:hover { background: #f4d99e; }
+    button:disabled { opacity: .67; cursor: wait; }
+    button:focus-visible { outline: 2px solid #f8efd9; outline-offset: 5px; }
+    progress { width: min(100%, 18rem); height: 1rem; accent-color: #e8c483; }
+    .controls, #message { margin-top: .85rem; margin-bottom: 0; font-size: .92rem; }
+    .controls { color: #dedbc7; }
+    #message { min-height: 1.35rem; }
+    @media (max-width: 640px) {
+      .cover::before {
+        background-image: linear-gradient(0deg, #14281bef 5%, #14281bc9 48%, #14281b28 91%), url("cover.png");
+      }
+      .cover { align-items: end; }
+      .panel { padding-bottom: 1.15rem; }
+    }
+    @media (max-height: 460px) {
+      h1 { font-size: clamp(2.6rem, 10vmin, 4.25rem); }
+      .panel { padding-bottom: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <canvas id="canvas" tabindex="0" aria-label="Medieval Sim game">This game needs a browser with canvas support.</canvas>
+  </div>
+  <div class="cover" id="cover">
+    <main class="panel">
+      <h1>Alderwick</h1>
+      <p>Walk the village streets, meet the residents, and see how their lives fit together.</p>
+      <button id="play" type="button" disabled>Enter the village</button>
+      <progress id="progress" aria-label="Loading the game" hidden></progress>
+      <p id="controls" class="controls"></p>
+      <p id="message" role="status" aria-live="polite"></p>
+      <noscript>Enable JavaScript to play.</noscript>
+    </main>
+  </div>
+  <script src="index.js?v=ab3f499ab0b4"></script>
+  <script>
+    const config = {"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":7216344,"index.wasm":37700666},"focusCanvas":false,"gdextensionLibs":[],"godotPoolSize":4};
+    const threads = false;
+    const game = document.getElementById("game");
+    const canvas = document.getElementById("canvas");
+    const cover = document.getElementById("cover");
+    const play = document.getElementById("play");
+    const progress = document.getElementById("progress");
+    const controls = document.getElementById("controls");
+    const message = document.getElementById("message");
+    const coarse = matchMedia("(pointer: coarse)").matches;
+    window.medievalTouch = coarse || (navigator.maxTouchPoints > 0 && matchMedia("(hover: none)").matches);
+    controls.textContent = window.medievalTouch
+      ? "Drag to pan, pinch to zoom, and tap a villager to inspect."
+      : "Use WASD to move, the mouse to look, E to inspect, and Tab to survey the village.";
+
+    function setBackingSize() {
+      const bounds = game.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      const pixelBudget = window.medievalTouch ? 950000 : 4200000;
+      const pixelRatio = Math.min(devicePixelRatio || 1,
+        window.medievalTouch ? 1.45 : 2.0, Math.sqrt(pixelBudget / (bounds.width * bounds.height)));
+      const width = Math.max(1, Math.round(bounds.width * pixelRatio));
+      const height = Math.max(1, Math.round(bounds.height * pixelRatio));
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
+    }
+
+    function offerReload(reason) {
+      cover.hidden = false;
+      controls.hidden = true;
+      progress.hidden = true;
+      message.textContent = reason;
+      play.textContent = "Reload game";
+      play.hidden = false;
+      play.addEventListener("click", () => location.reload(), { once: true });
+    }
+
+    play.addEventListener("click", async () => {
+      play.hidden = true;
+      controls.hidden = true;
+      progress.hidden = false;
+      message.textContent = "Loading Alderwick…";
+      try {
+        if (typeof Engine === "undefined") {
+          throw new Error("The game loader couldn’t download. Reload to try again.");
+        }
+        const missing = Engine.getMissingFeatures({ threads });
+        if (missing.length || typeof DecompressionStream === "undefined") {
+          throw new Error("This game needs a recent browser with WebGL 2 and WebAssembly.");
+        }
+        setBackingSize();
+        const engine = new Engine(config);
+        await engine.startGame({
+          onProgress(current, total) {
+            if (total > 0) {
+              progress.max = total;
+              progress.value = current;
+            }
+          }
+        });
+        cover.hidden = true;
+        canvas.focus({ preventScroll: true });
+      } catch (error) {
+        offerReload(error.message || "Alderwick couldn’t load. Reload to try again.");
+        console.error(error);
+      }
+    }, { once: true });
+    new ResizeObserver(setBackingSize).observe(game);
+    window.addEventListener("resize", setBackingSize);
+    canvas.addEventListener("webglcontextlost", () => offerReload("The graphics session ended. Reload to return to Alderwick."), { once: true });
+    play.disabled = false;
+  </script>
+</body>
+</html>
+
