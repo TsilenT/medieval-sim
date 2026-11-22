@@ -144,7 +144,7 @@ const Preloader = /** @constructor */ function () { // eslint-disable-line no-un
 		};
 		const isEngine = file.endsWith('.wasm');
 const asset = isEngine ? file + '.gz' : file;
-return fetch(asset + '?v=9c29bec185ef').then(function (response) {
+return fetch(asset + '?v=8c57edd6300d').then(function (response) {
   if (!isEngine || !response.ok) return response;
   const stream = response.body.pipeThrough(new DecompressionStream('gzip'));
   return new Response(stream, { headers: { 'Content-Type': 'application/wasm' } });
